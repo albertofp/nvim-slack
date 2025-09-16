@@ -26,7 +26,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  'albertopluecker/nvim-slack',
+  'albertopfp/nvim-slack',
   dependencies = {
     'nvim-lua/plenary.nvim', -- Optional but recommended
   },
@@ -58,10 +58,7 @@ This tells Slack what your app can do as you.
 
 1. In your app settings, click **"OAuth & Permissions"** in the left sidebar
 2. Scroll down to **"Scopes"** section
-3. **⚠️ IMPORTANT: Look for "User Token Scopes" NOT "Bot Token Scopes"!**
-   - User Token Scopes = You acting as yourself
-   - Bot Token Scopes = A bot acting separately (we don't want this)
-4. Under **"User Token Scopes"**, click **"Add an OAuth Scope"** and add these permissions:
+3. Under **"User Token Scopes"**, click **"Add an OAuth Scope"** and add these permissions:
 
 **Required Scopes:**
 - `chat:write` - Send messages as you
@@ -189,28 +186,11 @@ All keybindings work in normal mode unless specified otherwise.
 
 ## Important Notes About Authentication
 
-### What You Need vs What You Don't
+### What You Need
 
-**You DO need:**
 - A Slack app (just as an OAuth container)
 - User OAuth Token (`xoxp-...`) from OAuth & Permissions page
 - User Token Scopes (not Bot scopes)
-
-**You DON'T need:**
-- App-Level Token (`xapp-...`) - This is for Socket Mode
-- Bot User OAuth Token (`xoxb-...`) - This is for bots
-- Socket Mode enabled
-- Event Subscriptions
-- Webhooks
-- Verification tokens
-
-### How It Works
-
-1. The Slack app is just a container for OAuth configuration
-2. Installing the app to your workspace generates a User OAuth Token
-3. This token represents YOU and performs all actions as YOU
-4. Messages appear as sent by you, not by a bot
-5. You can only see/access channels that you personally have access to
 
 ## Token Security
 
@@ -230,9 +210,9 @@ This plugin is in early development. Current features:
 - ✅ WebSocket connection to Slack
 - ✅ Basic UI buffer
 - ✅ Configuration management
-- 🚧 Channel listing
-- 🚧 Message viewing
-- 🚧 Message sending
+- ✅ Channel listing
+- ✅ Message viewing
+- ✅ Message sending
 
 ## License
 
