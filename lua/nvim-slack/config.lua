@@ -4,13 +4,13 @@ local M = {}
 local defaults = {
   -- Authentication
   token = nil, -- Slack user token (xoxp-...)
-  
+
   -- API settings
   api = {
     debug = false,
     request_timeout = 5000, -- ms
   },
-  
+
   -- UI Settings
   ui = {
     width = 80,
@@ -21,17 +21,17 @@ local defaults = {
     date_format = '%H:%M',
     highlight_mentions = true,
   },
-  
+
   -- Behavior
   auto_mark_read = true,
   show_typing_indicator = true,
   max_message_length = 4000,
-  
+
   -- Performance
   cache_messages = 100,
-  sync_interval = 30, -- seconds
+  sync_interval = 30,     -- seconds
   request_timeout = 5000, -- ms
-  
+
   -- Keymaps
   keymaps = {
     send_message = '<CR>',
@@ -50,19 +50,20 @@ local config = {}
 
 -- Merge user config with defaults
 local function merge_config(user_opts)
-  config = vim.tbl_deep_extend('force', defaults, user_opts or {})
-  
+  local merged = vim.tbl_deep_extend('force', defaults, user_opts or {})
+
   -- Validate token
-  if config.token and not config.token:match('^xoxp%-') then
+  if merged.token and not merged.token:match('^xoxp%-') then
     vim.notify('Warning: Token should be a user token starting with "xoxp-"', vim.log.levels.WARN)
   end
-  
-  return config
+
+  return merged
 end
 
 -- Setup configuration
 function M.setup(opts)
-  return merge_config(opts)
+  config = merge_config(opts)
+  return config
 end
 
 -- Get current configuration
@@ -87,13 +88,13 @@ function M.get_token()
   if config.token then
     return config.token
   end
-  
+
   -- Try environment variable
   local env_token = os.getenv('SLACK_APP_TOKEN')
   if env_token then
     return env_token
   end
-  
+
   -- Try to read from secure file
   local token_file = vim.fn.expand('~/.config/nvim/slack-token')
   if vim.fn.filereadable(token_file) == 1 then
@@ -102,7 +103,7 @@ function M.get_token()
       return vim.trim(lines[1])
     end
   end
-  
+
   return nil
 end
 
@@ -115,17 +116,17 @@ end
 function M.validate()
   local ok = true
   local errors = {}
-  
+
   if not M.get_token() then
     ok = false
     table.insert(errors, 'No Slack token configured')
   end
-  
-  if config.websocket.ping_interval < 10 then
+
+  if config.api and config.api.request_timeout and config.api.request_timeout < 1000 then
     ok = false
-    table.insert(errors, 'WebSocket ping interval should be at least 10 seconds')
+    table.insert(errors, 'API request timeout should be at least 1000ms')
   end
-  
+
   return ok, errors
 end
 

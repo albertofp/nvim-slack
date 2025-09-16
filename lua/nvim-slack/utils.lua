@@ -11,7 +11,7 @@ function M.curl(opts)
       body = opts.data,
       timeout = opts.timeout or 5000,
     })
-    
+
     if opts.callback then
       opts.callback({
         status = res.status,
@@ -22,16 +22,16 @@ function M.curl(opts)
     end
     return
   end
-  
+
   -- Fallback to curl command
-  local cmd = {'curl', '-s', '-w', '\n%{http_code}'}
-  
+  local cmd = { 'curl', '-s', '-w', '\n%{http_code}' }
+
   -- Method
   if opts.method and opts.method ~= 'GET' then
     table.insert(cmd, '-X')
     table.insert(cmd, opts.method)
   end
-  
+
   -- Headers
   if opts.headers then
     for key, value in pairs(opts.headers) do
@@ -39,20 +39,20 @@ function M.curl(opts)
       table.insert(cmd, string.format('%s: %s', key, value))
     end
   end
-  
+
   -- Data
   if opts.data then
     table.insert(cmd, '-d')
     table.insert(cmd, opts.data)
   end
-  
+
   -- URL must be last
   table.insert(cmd, opts.url)
-  
+
   -- Execute curl synchronously for now
   local result = vim.fn.system(cmd)
   local exit_code = vim.v.shell_error
-  
+
   if exit_code ~= 0 then
     if opts.callback then
       opts.callback({
@@ -62,13 +62,13 @@ function M.curl(opts)
     end
     return
   end
-  
+
   -- Parse response - last line is status code
   local lines = vim.split(result, '\n')
   local status_code = tonumber(lines[#lines]) or 0
   table.remove(lines) -- Remove status code line
   local body = table.concat(lines, '\n')
-  
+
   if opts.callback then
     opts.callback({
       status = status_code,
@@ -98,34 +98,34 @@ end
 function M.parse_mrkdwn(text)
   -- Basic conversion of Slack markdown to plain text
   local result = text
-  
+
   -- Bold: *text* -> text
   result = result:gsub('%*([^%*]+)%*', '%1')
-  
+
   -- Italic: _text_ -> text
   result = result:gsub('_([^_]+)_', '%1')
-  
+
   -- Strike: ~text~ -> text
   result = result:gsub('~([^~]+)~', '%1')
-  
+
   -- Code: `text` -> text
   result = result:gsub('`([^`]+)`', '%1')
-  
+
   -- Links: <url|text> -> text
   result = result:gsub('<[^|>]+|([^>]+)>', '%1')
-  
+
   -- Links without text: <url> -> url
   result = result:gsub('<([^>]+)>', '%1')
-  
+
   -- User mentions: <@U12345> -> @user
   result = result:gsub('<@(U%w+)>', function(user_id)
     -- In real implementation, resolve user name
     return '@user'
   end)
-  
+
   -- Channel mentions: <#C12345|channel> -> #channel
   result = result:gsub('<#C%w+|([^>]+)>', '#%1')
-  
+
   return result
 end
 

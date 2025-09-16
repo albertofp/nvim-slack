@@ -1,4 +1,5 @@
 local M = {}
+local api = require('nvim-slack.api')
 
 -- Local cache for user data
 local user_cache = {}
@@ -10,45 +11,41 @@ function M.info(user_id, callback)
     callback(user_cache[user_id])
     return
   end
-  
-  local websocket = require('nvim-slack.api')
-  
-  websocket.api_request('users.info', {
+
+  api.api_request('users.info', {
     user = user_id,
   }, function(data, error)
     if error then
       callback(nil, error)
       return
     end
-    
+
     -- Cache the user data
     if data.user then
       user_cache[user_id] = data.user
     end
-    
+
     callback(data.user)
   end)
 end
 
 -- List all users
 function M.list(callback)
-  local websocket = require('nvim-slack.api')
-  
-  websocket.api_request('users.list', {
+  api.api_request('users.list', {
     limit = 1000,
   }, function(data, error)
     if error then
       callback(nil, error)
       return
     end
-    
+
     -- Cache all users
     if data.members then
       for _, user in ipairs(data.members) do
         user_cache[user.id] = user
       end
     end
-    
+
     callback(data.members or {})
   end)
 end
@@ -68,12 +65,12 @@ end
 
 -- Batch fetch users and populate cache
 function M.populate_cache(callback)
-  M.list(function(users, error)
+  M.list(function(_, error)
     if error then
       if callback then callback(false, error) end
       return
     end
-    
+
     if callback then callback(true) end
   end)
 end

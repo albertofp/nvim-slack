@@ -1,4 +1,6 @@
 local M = {}
+local config = require('nvim-slack.config')
+local api = require('nvim-slack.api')
 
 -- Local state
 local state = {
@@ -10,12 +12,11 @@ local state = {
 
 -- Setup function to initialize the plugin with user config
 function M.setup(opts)
-  local config = require('nvim-slack.config')
   state.config = config.setup(opts)
 
   -- Initialize submodules
   require('nvim-slack.api').setup(state.config)
-  
+
   -- Load debug module in development
   require('nvim-slack.debug')
 end
@@ -27,7 +28,6 @@ function M.connect()
     return
   end
 
-  local config = require('nvim-slack.config')
   local token = config.get_token()
 
   if not token then
@@ -37,7 +37,6 @@ function M.connect()
 
   -- Connecting silently
 
-  local api = require('nvim-slack.api')
   api.connect(token, function(success, error)
     if success then
       state.connected = true
@@ -104,4 +103,3 @@ function M.get_state()
 end
 
 return M
-
