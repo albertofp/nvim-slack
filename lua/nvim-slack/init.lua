@@ -80,7 +80,17 @@ end
 -- Open Slack buffer
 function M.open()
   if not state.connected then
-    vim.notify('Not connected to Slack. Run :SlackConnect first', vim.log.levels.WARN)
+    vim.notify('Not connected to Slack. Connecting...', vim.log.levels.INFO)
+    M.connect()
+    -- Wait a moment for connection to complete
+    vim.defer_fn(function()
+      if state.connected then
+        local ui = require('nvim-slack.ui.buffer')
+        ui.open()
+      else
+        vim.notify('Failed to connect to Slack. Check your token configuration.', vim.log.levels.ERROR)
+      end
+    end, 1000)
     return
   end
 
