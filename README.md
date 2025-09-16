@@ -180,7 +180,7 @@ All keybindings work in normal mode unless specified otherwise.
 | Key | Action |
 |-----|--------|
 | `t` | Reply to selected message in thread |
-| `e` | Add emoji reaction to selected message |
+| `e` | Toggle emoji reaction (adds if not present, removes if already added) |
 | `<Enter>` | View thread (opens thread view for any message) |
 
 #### Thread View
@@ -189,7 +189,7 @@ All keybindings work in normal mode unless specified otherwise.
 | `j`/`k` | Navigate between thread messages |
 | `i` | Type message (automatically replies to thread) |
 | `t` | Reply to selected message in thread |
-| `e` | Add emoji reaction to selected message |
+| `e` | Toggle emoji reaction (adds if not present, removes if already added) |
 | `b` | Go back to channel view |
 | `r` | Refresh thread |
 | `q` | Close Slack |

@@ -1,5 +1,34 @@
+---@diagnostic disable-next-line: unused-local
+local types = require('nvim-slack.types')
+
 local M = {}
 
+---@class SlackUIState
+---@field buf number?
+---@field win number?
+---@field channels_buf number?
+---@field channels_win number?
+---@field messages_buf number?
+---@field messages_win number?
+---@field input_buf number?
+---@field input_win number?
+---@field channels SlackChannel[]
+---@field current_channel SlackChannel?
+---@field messages SlackMessage[]
+---@field message_timestamps table<number, SlackSelectedMessage>
+---@field thread_messages SlackMessage[]
+---@field thread_parent SlackSelectedMessage?
+---@field channel_cursor number
+---@field message_cursor number
+---@field selected_message SlackSelectedMessage?
+---@field mode string
+---@field view_mode string
+---@field poll_timer any
+---@field last_message_count number
+---@field thread_ts string?
+---@field is_thread_reply boolean?
+
+---@type SlackUIState
 local state = {
   buf = nil,
   win = nil,
@@ -9,7 +38,7 @@ local state = {
   messages_win = nil,
   input_buf = nil,
   input_win = nil,
-  
+
   -- Data
   channels = {},
   current_channel = nil,
@@ -17,14 +46,14 @@ local state = {
   message_timestamps = {}, -- Store timestamps for each message line
   thread_messages = {},
   thread_parent = nil,
-  
+
   -- UI state
   channel_cursor = 1,
   message_cursor = 1,
   selected_message = nil,
-  mode = 'normal', -- normal, insert, thread
+  mode = 'normal',       -- normal, insert, thread
   view_mode = 'channel', -- channel or thread
-  
+
   -- Polling state
   poll_timer = nil,
   last_message_count = 0,
@@ -37,50 +66,47 @@ local start_polling
 function M.open()
   -- Close existing windows if any
   M.close()
-  
+
   -- Create main container
   vim.cmd('tabnew')
   state.win = vim.api.nvim_get_current_win()
   state.buf = vim.api.nvim_get_current_buf()
-  
+
   -- Set buffer name
   vim.api.nvim_buf_set_name(state.buf, '[Slack]')
-  
+
   -- Calculate dimensions
   local width = vim.o.columns
-  local height = vim.o.lines - vim.o.cmdheight - 1
   local channel_width = math.min(30, math.floor(width * 0.25))
-  local message_width = width - channel_width - 1
   local input_height = 3
-  local message_height = height - input_height - 1
-  
+
   -- Create channel list window (left)
   vim.cmd('topleft ' .. channel_width .. 'vnew')
   state.channels_win = vim.api.nvim_get_current_win()
   state.channels_buf = vim.api.nvim_get_current_buf()
   M.setup_channel_buffer()
-  
+
   -- Create message window (right top)
   vim.cmd('wincmd l')
   state.messages_win = vim.api.nvim_get_current_win()
   state.messages_buf = vim.api.nvim_get_current_buf()
   M.setup_message_buffer()
-  
+
   -- Create input window (right bottom)
   vim.cmd('rightbelow ' .. input_height .. 'new')
   state.input_win = vim.api.nvim_get_current_win()
   state.input_buf = vim.api.nvim_get_current_buf()
   M.setup_input_buffer()
-  
+
   -- Go back to channels window
   vim.api.nvim_set_current_win(state.channels_win)
-  
+
   -- Load initial data
   M.refresh_channels()
-  
+
   -- Set up autocommands
   M.setup_autocmds()
-  
+
   -- Start polling for updates
   start_polling()
 end
@@ -88,21 +114,25 @@ end
 -- Setup channel list buffer
 function M.setup_channel_buffer()
   local buf = state.channels_buf
-  
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'slack-channels')
-  
-  vim.api.nvim_buf_set_name(buf, '[Slack Channels]')
-  
+
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = buf })
+  vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('filetype', 'slack-channels', { buf = buf })
+
+  if buf then
+    vim.api.nvim_buf_set_name(buf, '[Slack Channels]')
+  end
+
   -- Window options
-  vim.api.nvim_win_set_option(state.channels_win, 'number', false)
-  vim.api.nvim_win_set_option(state.channels_win, 'relativenumber', false)
-  vim.api.nvim_win_set_option(state.channels_win, 'signcolumn', 'no')
-  vim.api.nvim_win_set_option(state.channels_win, 'wrap', false)
-  
+  if state.channels_win and vim.api.nvim_win_is_valid(state.channels_win) then
+    vim.api.nvim_set_option_value('number', false, { win = state.channels_win })
+    vim.api.nvim_set_option_value('relativenumber', false, { win = state.channels_win })
+    vim.api.nvim_set_option_value('signcolumn', 'no', { win = state.channels_win })
+    vim.api.nvim_set_option_value('wrap', false, { win = state.channels_win })
+  end
+
   -- Keymaps
   local opts = { buffer = buf, silent = true }
   vim.keymap.set('n', '<CR>', function() M.open_channel() end, opts)
@@ -118,25 +148,33 @@ end
 -- Setup message buffer
 function M.setup_message_buffer()
   local buf = state.messages_buf
-  
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'slack-messages')
-  
-  vim.api.nvim_buf_set_name(buf, '[Slack Messages]')
-  
+
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = buf })
+  vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
+  vim.api.nvim_set_option_value('modifiable', false, { buf = buf })
+  vim.api.nvim_set_option_value('filetype', 'slack-messages', { buf = buf })
+
+  if buf then
+    vim.api.nvim_buf_set_name(buf, '[Slack Messages]')
+  end
+
   -- Window options
-  vim.api.nvim_win_set_option(state.messages_win, 'number', false)
-  vim.api.nvim_win_set_option(state.messages_win, 'relativenumber', false)
-  vim.api.nvim_win_set_option(state.messages_win, 'signcolumn', 'no')
-  vim.api.nvim_win_set_option(state.messages_win, 'wrap', true)
-  vim.api.nvim_win_set_option(state.messages_win, 'linebreak', true)
-  
+  if state.messages_win and vim.api.nvim_win_is_valid(state.messages_win) then
+    vim.api.nvim_set_option_value('number', false, { win = state.messages_win })
+    vim.api.nvim_set_option_value('relativenumber', false, { win = state.messages_win })
+    vim.api.nvim_set_option_value('signcolumn', 'no', { win = state.messages_win })
+    vim.api.nvim_set_option_value('wrap', true, { win = state.messages_win })
+    vim.api.nvim_set_option_value('linebreak', true, { win = state.messages_win })
+  end
+
   -- Keymaps
   local opts = { buffer = buf, silent = true }
-  vim.keymap.set('n', 'h', function() vim.api.nvim_set_current_win(state.channels_win) end, opts)
+  vim.keymap.set('n', 'h', function()
+    if state.channels_win and vim.api.nvim_win_is_valid(state.channels_win) then
+      vim.api.nvim_set_current_win(state.channels_win)
+    end
+  end, opts)
   vim.keymap.set('n', 'j', function() M.move_message_cursor(1) end, opts)
   vim.keymap.set('n', 'k', function() M.move_message_cursor(-1) end, opts)
   vim.keymap.set('n', 'G', function() M.scroll_messages_bottom() end, opts)
@@ -153,27 +191,37 @@ end
 -- Setup input buffer
 function M.setup_input_buffer()
   local buf = state.input_buf
-  
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', true)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'slack-input')
-  
-  vim.api.nvim_buf_set_name(buf, '[Slack Input]')
-  
+
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = buf })
+  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = buf })
+  vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
+  vim.api.nvim_set_option_value('modifiable', true, { buf = buf })
+  vim.api.nvim_set_option_value('filetype', 'slack-input', { buf = buf })
+
+  if buf then
+    vim.api.nvim_buf_set_name(buf, '[Slack Input]')
+  end
+
   -- Window options
-  vim.api.nvim_win_set_option(state.input_win, 'number', false)
-  vim.api.nvim_win_set_option(state.input_win, 'relativenumber', false)
-  vim.api.nvim_win_set_option(state.input_win, 'signcolumn', 'no')
-  vim.api.nvim_win_set_option(state.input_win, 'wrap', true)
-  
+  if state.input_win and vim.api.nvim_win_is_valid(state.input_win) then
+    vim.api.nvim_set_option_value('number', false, { win = state.input_win })
+    vim.api.nvim_set_option_value('relativenumber', false, { win = state.input_win })
+    vim.api.nvim_set_option_value('signcolumn', 'no', { win = state.input_win })
+    vim.api.nvim_set_option_value('wrap', true, { win = state.input_win })
+  end
+
   -- Initial prompt
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {'Type your message...'})
-  
+  if buf then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'Type your message...' })
+  end
+
   -- Keymaps
   local opts = { buffer = buf, silent = true }
-  vim.keymap.set('n', '<Esc>', function() vim.api.nvim_set_current_win(state.messages_win) end, opts)
+  vim.keymap.set('n', '<Esc>', function()
+    if state.messages_win and vim.api.nvim_win_is_valid(state.messages_win) then
+      vim.api.nvim_set_current_win(state.messages_win)
+    end
+  end, opts)
   vim.keymap.set('i', '<C-Enter>', function() M.send_message() end, opts)
   vim.keymap.set('n', '<CR>', function() M.send_message() end, opts)
 end
@@ -181,18 +229,18 @@ end
 -- Refresh channel list
 function M.refresh_channels()
   local conversations = require('nvim-slack.api.conversations')
-  
+
   -- Silent loading
-  
+
   conversations.list(function(channels, error)
     if error then
       vim.notify('Failed to load channels: ' .. error, vim.log.levels.ERROR)
       return
     end
-    
+
     state.channels = channels
     M.render_channels()
-    
+
     -- Auto-select first channel
     if #channels > 0 and not state.current_channel then
       state.channel_cursor = 1
@@ -206,21 +254,21 @@ function M.render_channels()
   if not state.channels_buf or not vim.api.nvim_buf_is_valid(state.channels_buf) then
     return
   end
-  
-  vim.api.nvim_buf_set_option(state.channels_buf, 'modifiable', true)
-  
+
+  vim.api.nvim_set_option_value('modifiable', true, { buf = state.channels_buf })
+
   local lines = {}
   local highlights = {}
-  
+
   table.insert(lines, ' CHANNELS')
   table.insert(lines, ' ' .. string.rep('─', 28))
-  
+
   for i, channel in ipairs(state.channels) do
     local prefix = '  '
     if channel.has_unreads then
       prefix = '● '
     end
-    
+
     local name = channel.name
     if channel.is_im then
       name = '@' .. (channel.user or 'direct')
@@ -229,32 +277,33 @@ function M.render_channels()
     else
       name = '#' .. name
     end
-    
+
     -- Truncate long names
     if #name > 25 then
       name = name:sub(1, 22) .. '...'
     end
-    
+
     local line = prefix .. name
     if i == state.channel_cursor then
       line = '▸ ' .. name
-      table.insert(highlights, {i + 1, 'SlackChannelSelected'})
+      table.insert(highlights, { i + 1, 'SlackChannelSelected' })
     end
-    
+
     table.insert(lines, line)
   end
-  
+
   vim.api.nvim_buf_set_lines(state.channels_buf, 0, -1, false, lines)
-  
+
   -- Apply highlights
   local ns = vim.api.nvim_create_namespace('slack_channels')
   vim.api.nvim_buf_clear_namespace(state.channels_buf, ns, 0, -1)
-  
+
   for _, hl in ipairs(highlights) do
-    vim.api.nvim_buf_add_highlight(state.channels_buf, ns, hl[2], hl[1], 0, -1)
+    vim.api.nvim_buf_set_extmark(state.channels_buf, ns, hl[1] - 1, 0,
+      { end_row = hl[1] - 1, hl_eol = true, hl_group = hl[2] })
   end
-  
-  vim.api.nvim_buf_set_option(state.channels_buf, 'modifiable', false)
+
+  vim.api.nvim_set_option_value('modifiable', false, { buf = state.channels_buf })
 end
 
 -- Open selected channel
@@ -262,10 +311,10 @@ function M.open_channel()
   if state.channel_cursor < 1 or state.channel_cursor > #state.channels then
     return
   end
-  
+
   local channel = state.channels[state.channel_cursor]
   state.current_channel = channel
-  
+
   M.refresh_messages()
 end
 
@@ -274,17 +323,17 @@ function M.refresh_messages()
   if not state.current_channel then
     return
   end
-  
+
   local conversations = require('nvim-slack.api.conversations')
-  
+
   -- Silent loading
-  
+
   conversations.history(state.current_channel.id, function(messages, error)
     if error then
       vim.notify('Failed to load messages: ' .. error, vim.log.levels.ERROR)
       return
     end
-    
+
     state.messages = messages
     M.render_messages()
   end)
@@ -295,13 +344,13 @@ function M.render_messages()
   if not state.messages_buf or not vim.api.nvim_buf_is_valid(state.messages_buf) then
     return
   end
-  
-  vim.api.nvim_buf_set_option(state.messages_buf, 'modifiable', true)
-  
+
+  vim.api.nvim_set_option_value('modifiable', true, { buf = state.messages_buf })
+
   local lines = {}
   local users = require('nvim-slack.api.users')
   state.message_timestamps = {}
-  
+
   -- Header
   local channel_name = state.current_channel.name
   if state.current_channel.is_im then
@@ -311,11 +360,11 @@ function M.render_messages()
   else
     channel_name = '#' .. channel_name
   end
-  
+
   table.insert(lines, ' ' .. channel_name)
   table.insert(lines, ' ' .. string.rep('─', vim.api.nvim_win_get_width(state.messages_win) - 2))
   table.insert(lines, '')
-  
+
   -- Messages
   for i, msg in ipairs(state.messages) do
     if msg.type == 'message' and not msg.subtype then
@@ -330,13 +379,13 @@ function M.render_messages()
         thread_ts = msg.thread_ts,
         reply_count = msg.reply_count,
       }
-      
+
       -- Format timestamp
       local timestamp = os.date('%H:%M', tonumber(msg.ts))
-      
+
       -- Get username
       local username = users.get_display_name(msg.user)
-      
+
       -- Format message header with selection indicator
       local header = string.format('[%s] %s:', timestamp, username)
       if state.selected_message and state.selected_message.ts == msg.ts then
@@ -344,15 +393,15 @@ function M.render_messages()
       else
         header = '  ' .. header
       end
-      
+
       table.insert(lines, header)
-      
+
       -- Split message text by newlines
       local text_lines = vim.split(msg.text or '', '\n')
       for _, line in ipairs(text_lines) do
         table.insert(lines, '    ' .. line)
       end
-      
+
       -- Show reactions if any
       if msg.reactions and #msg.reactions > 0 then
         local reaction_line = '    '
@@ -361,78 +410,37 @@ function M.render_messages()
         end
         table.insert(lines, reaction_line)
       end
-      
+
       -- Show thread indicator if any
       if msg.reply_count and msg.reply_count > 0 then
         table.insert(lines, '    💬 ' .. msg.reply_count .. ' replies')
       end
-      
+
       table.insert(lines, '')
     end
   end
-  
+
   vim.api.nvim_buf_set_lines(state.messages_buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(state.messages_buf, 'modifiable', false)
-  
+  vim.api.nvim_set_option_value('modifiable', false, { buf = state.messages_buf })
+
   -- Apply highlights
   local ns = vim.api.nvim_create_namespace('slack_messages')
   vim.api.nvim_buf_clear_namespace(state.messages_buf, ns, 0, -1)
-  
+
   -- Highlight selected message
   if state.selected_message then
     for line_num, msg_info in pairs(state.message_timestamps) do
       if msg_info.ts == state.selected_message.ts then
-        vim.api.nvim_buf_add_highlight(state.messages_buf, ns, 'SlackMessageSelected', line_num - 1, 0, -1)
+        vim.api.nvim_buf_set_extmark(state.messages_buf, ns, line_num - 1, 0,
+          { end_row = line_num - 1, hl_eol = true, hl_group = 'SlackMessageSelected' })
       end
     end
   end
-  
+
   -- Scroll to bottom only on initial load
   if state.message_cursor == 1 then
     M.scroll_messages_bottom()
   end
-end
-
--- Send message
-function M.send_message()
-  if not state.current_channel then
-    vim.notify('No channel selected', vim.log.levels.WARN)
-    return
-  end
-  
-  -- Get input text
-  local lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
-  local text = table.concat(lines, '\n')
-  
-  -- Remove default prompt
-  if text == 'Type your message...' then
-    text = ''
-  end
-  
-  text = vim.trim(text)
-  
-  if text == '' then
-    return
-  end
-  
-  local chat = require('nvim-slack.api.chat')
-  
-  -- Silent sending
-  
-  chat.post_message(state.current_channel.id, text, function(result, error)
-    if error then
-      vim.notify('Failed to send message: ' .. error, vim.log.levels.ERROR)
-      return
-    end
-    
-    -- Message sent successfully
-    
-    -- Clear input
-    vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, {''})
-    
-    -- Refresh messages
-    M.refresh_messages()
-  end)
 end
 
 -- Navigation functions
@@ -443,13 +451,13 @@ end
 
 function M.move_message_cursor(delta)
   local win = state.messages_win
-  if not vim.api.nvim_win_is_valid(win) then
+  if not win or not vim.api.nvim_win_is_valid(win) then
     return
   end
-  
+
   local current = vim.api.nvim_win_get_cursor(win)[1]
   local new_pos = current
-  
+
   -- Find next/prev message
   if delta > 0 then
     -- Moving down - find next message
@@ -468,41 +476,47 @@ function M.move_message_cursor(delta)
       end
     end
   end
-  
+
   -- Update cursor position
-  vim.api.nvim_win_set_cursor(win, {new_pos, 0})
-  
+  vim.api.nvim_win_set_cursor(win, { new_pos, 0 })
+
   -- Update selected message
   state.selected_message = state.message_timestamps[new_pos]
   state.message_cursor = new_pos
-  
+
   -- Re-render to update selection highlight
   M.render_messages()
 end
 
 function M.scroll_messages(delta)
   local win = state.messages_win
-  if vim.api.nvim_win_is_valid(win) then
+  if win and vim.api.nvim_win_is_valid(win) then
     local current = vim.api.nvim_win_get_cursor(win)[1]
     local new_pos = math.max(1, current + delta)
-    vim.api.nvim_win_set_cursor(win, {new_pos, 0})
+    vim.api.nvim_win_set_cursor(win, { new_pos, 0 })
   end
 end
 
 function M.scroll_messages_bottom()
   local win = state.messages_win
-  if vim.api.nvim_win_is_valid(win) then
+  if win and vim.api.nvim_win_is_valid(win) then
     local line_count = vim.api.nvim_buf_line_count(state.messages_buf)
-    vim.api.nvim_win_set_cursor(win, {line_count, 0})
+    vim.api.nvim_win_set_cursor(win, { line_count, 0 })
   end
 end
 
 function M.focus_input()
-  vim.api.nvim_set_current_win(state.input_win)
+  if state.input_win and vim.api.nvim_win_is_valid(state.input_win) then
+    vim.api.nvim_set_current_win(state.input_win)
+  else
+    return
+  end
   -- Clear default prompt on first focus
-  local lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
-  if #lines == 1 and lines[1] == 'Type your message...' then
-    vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, {''})
+  if state.input_buf and vim.api.nvim_buf_is_valid(state.input_buf) then
+    local lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
+    if #lines == 1 and lines[1] == 'Type your message...' then
+      vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, { '' })
+    end
   end
   vim.cmd('startinsert')
 end
@@ -510,7 +524,7 @@ end
 -- Setup autocommands
 function M.setup_autocmds()
   local group = vim.api.nvim_create_augroup('SlackUI', { clear = true })
-  
+
   -- Auto-resize on window resize
   vim.api.nvim_create_autocmd('VimResized', {
     group = group,
@@ -518,9 +532,9 @@ function M.setup_autocmds()
       -- Recalculate layout
     end,
   })
-  
+
   -- Clean up on buffer delete
-  for _, buf in ipairs({state.channels_buf, state.messages_buf, state.input_buf}) do
+  for _, buf in ipairs({ state.channels_buf, state.messages_buf, state.input_buf }) do
     if buf then
       vim.api.nvim_create_autocmd('BufDelete', {
         group = group,
@@ -539,101 +553,106 @@ start_polling = function()
   if state.poll_timer then
     return -- Already polling
   end
-  
+
   local config = require('nvim-slack.config').get()
   local interval = config.sync_interval * 1000 -- Convert to milliseconds
-  
-  state.poll_timer = vim.loop.new_timer()
-  state.poll_timer:start(interval, interval, function()
-    -- Schedule the update in the main thread
-    vim.schedule(function()
-      -- Only poll if windows are still valid
-      if not vim.api.nvim_win_is_valid(state.messages_win or -1) then
-        M.stop_polling()
-        return
-      end
-      
-      -- Check if the Slack buffer is currently visible in any window
-      local slack_visible = false
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(win)
-        if buf == state.messages_buf or buf == state.channels_buf then
-          slack_visible = true
-          break
+
+  state.poll_timer = vim.uv.new_timer()
+  if state.poll_timer then
+    ---@diagnostic disable-next-line: undefined-field
+    state.poll_timer:start(interval, interval, function()
+      -- Schedule the update in the main thread
+      vim.schedule(function()
+        -- Only poll if windows are still valid
+        if not state.messages_win or not vim.api.nvim_win_is_valid(state.messages_win) then
+          M.stop_polling()
+          return
         end
-      end
-      
-      if not slack_visible then
-        return -- Don't poll if not visible
-      end
-      
-      -- Store current cursor position and selected message
-      local cursor_pos = nil
-      if vim.api.nvim_win_is_valid(state.messages_win) and 
-         vim.api.nvim_get_current_win() == state.messages_win then
-        cursor_pos = vim.api.nvim_win_get_cursor(state.messages_win)
-      end
-      
-      -- Refresh appropriate view
-      if state.view_mode == 'thread' and state.thread_parent then
-        -- Refresh thread silently
-        local thread_ts = state.thread_parent.thread_ts or state.thread_parent.ts
-        local conversations = require('nvim-slack.api.conversations')
-        
-        conversations.replies(state.current_channel.id, thread_ts, function(messages, error)
-          if not error and messages then
-            local prev_count = #state.thread_messages
-            state.thread_messages = messages
-            
-            -- Only re-render if message count changed
-            if #messages ~= prev_count then
-              M.render_thread()
-              
-              -- Restore cursor if it was in messages window
-              if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
-                pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+
+        -- Check if the Slack buffer is currently visible in any window
+        local slack_visible = false
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local buf = vim.api.nvim_win_get_buf(win)
+          if buf == state.messages_buf or buf == state.channels_buf then
+            slack_visible = true
+            break
+          end
+        end
+
+        if not slack_visible then
+          return -- Don't poll if not visible
+        end
+
+        -- Store current cursor position and selected message
+        local cursor_pos = nil
+        if vim.api.nvim_win_is_valid(state.messages_win) and
+            vim.api.nvim_get_current_win() == state.messages_win then
+          cursor_pos = vim.api.nvim_win_get_cursor(state.messages_win)
+        end
+
+        -- Refresh appropriate view
+        if state.view_mode == 'thread' and state.thread_parent then
+          -- Refresh thread silently
+          local thread_ts = state.thread_parent.thread_ts or state.thread_parent.ts
+          local conversations = require('nvim-slack.api.conversations')
+
+          conversations.replies(state.current_channel.id, thread_ts, function(messages, error)
+            if not error and messages then
+              local prev_count = #state.thread_messages
+              state.thread_messages = messages
+
+              -- Only re-render if message count changed
+              if #messages ~= prev_count then
+                M.render_thread()
+
+                -- Restore cursor if it was in messages window
+                if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
+                  pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+                end
               end
             end
-          end
-        end)
-      elseif state.current_channel then
-        -- Refresh channel messages silently
-        local conversations = require('nvim-slack.api.conversations')
-        
-        conversations.history(state.current_channel.id, function(messages, error)
-          if not error and messages then
-            local prev_count = #state.messages
-            state.messages = messages
-            
-            -- Only re-render if message count changed
-            if #messages ~= prev_count then
-              M.render_messages()
-              
-              -- If new messages arrived and we were at bottom, scroll to bottom
-              if #messages > prev_count and prev_count > 0 then
-                -- Check if we were near the bottom
-                if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
-                  local line_count = vim.api.nvim_buf_line_count(state.messages_buf)
-                  if cursor_pos[1] >= line_count - 5 then
-                    M.scroll_messages_bottom()
-                  else
-                    -- Otherwise restore cursor position
-                    pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+          end)
+        elseif state.current_channel then
+          -- Refresh channel messages silently
+          local conversations = require('nvim-slack.api.conversations')
+
+          conversations.history(state.current_channel.id, function(messages, error)
+            if not error and messages then
+              local prev_count = #state.messages
+              state.messages = messages
+
+              -- Only re-render if message count changed
+              if #messages ~= prev_count then
+                M.render_messages()
+
+                -- If new messages arrived and we were at bottom, scroll to bottom
+                if #messages > prev_count and prev_count > 0 then
+                  -- Check if we were near the bottom
+                  if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
+                    local line_count = vim.api.nvim_buf_line_count(state.messages_buf)
+                    if cursor_pos[1] >= line_count - 5 then
+                      M.scroll_messages_bottom()
+                    else
+                      -- Otherwise restore cursor position
+                      pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+                    end
                   end
                 end
               end
             end
-          end
-        end)
-      end
+          end)
+        end
+      end)
     end)
-  end)
+  end
 end
 
 -- Stop polling for updates
 M.stop_polling = function()
   if state.poll_timer then
+    ---@diagnostic disable-next-line: undefined-field
     state.poll_timer:stop()
+    ---@diagnostic disable-next-line: undefined-field
     state.poll_timer:close()
     state.poll_timer = nil
   end
@@ -643,13 +662,13 @@ end
 function M.close()
   -- Stop polling first
   M.stop_polling()
-  
-  for _, win in ipairs({state.channels_win, state.messages_win, state.input_win}) do
+
+  for _, win in ipairs({ state.channels_win, state.messages_win, state.input_win }) do
     if win and vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
   end
-  
+
   state.channels_win = nil
   state.messages_win = nil
   state.input_win = nil
@@ -666,11 +685,11 @@ function M.reply_to_thread()
     vim.notify('No message selected. Use j/k to select a message.', vim.log.levels.WARN)
     return
   end
-  
+
   -- Store the thread timestamp
   state.thread_ts = state.selected_message.thread_ts or state.selected_message.ts
   state.is_thread_reply = true
-  
+
   -- Focus input without prepopulating
   M.focus_input()
 end
@@ -681,23 +700,70 @@ function M.add_reaction()
     vim.notify('No message selected. Use j/k to select a message.', vim.log.levels.WARN)
     return
   end
-  
+
   -- Prompt for emoji
   vim.ui.input({ prompt = 'Enter emoji name (without colons): ' }, function(emoji)
     if not emoji or emoji == '' then
       return
     end
-    
+
     local reactions = require('nvim-slack.api.reactions')
-    reactions.add(state.current_channel.id, state.selected_message.ts, emoji, function(result, error)
-      if error then
-        vim.notify('Failed to add reaction: ' .. error, vim.log.levels.ERROR)
-        return
+    local api_state = require('nvim-slack.api')
+    local user_info = api_state.get_user_info()
+    local current_user_id = user_info.user_id
+
+    -- Check if user already reacted with this emoji
+    local has_reacted = false
+    if state.selected_message.reactions then
+      for _, reaction in ipairs(state.selected_message.reactions) do
+        if reaction.name == emoji and reaction.users then
+          for _, user_id in ipairs(reaction.users) do
+            if user_id == current_user_id then
+              has_reacted = true
+              break
+            end
+          end
+        end
       end
-      
-      -- Reaction added successfully
-      M.refresh_messages()
-    end)
+    end
+
+    -- If we can't determine from the message data, try adding first
+    if not has_reacted then
+      -- Try to add reaction
+      reactions.add(state.current_channel.id, state.selected_message.ts, emoji, function(_, error)
+        if error then
+          -- If error is "already_reacted", then remove it
+          if error:match('already_reacted') then
+            reactions.remove(state.current_channel.id, state.selected_message.ts, emoji, function(_, error2)
+              if error2 then
+                vim.notify('Failed to remove reaction: ' .. error2, vim.log.levels.ERROR)
+                return
+              end
+
+              -- Reaction removed successfully
+              M.refresh_messages()
+            end)
+          else
+            vim.notify('Failed to add reaction: ' .. error, vim.log.levels.ERROR)
+          end
+          return
+        end
+
+        -- Reaction added successfully
+        M.refresh_messages()
+      end)
+    else
+      -- Remove reaction
+      reactions.remove(state.current_channel.id, state.selected_message.ts, emoji, function(_, error)
+        if error then
+          vim.notify('Failed to remove reaction: ' .. error, vim.log.levels.ERROR)
+          return
+        end
+
+        -- Reaction removed successfully
+        M.refresh_messages()
+      end)
+    end
   end)
 end
 
@@ -707,22 +773,22 @@ function M.open_thread()
     vim.notify('No message selected. Use j/k to select a message.', vim.log.levels.WARN)
     return
   end
-  
+
   -- Can open thread for any message, not just those with replies
   local thread_ts = state.selected_message.thread_ts or state.selected_message.ts
-  
+
   local conversations = require('nvim-slack.api.conversations')
-  
+
   conversations.replies(state.current_channel.id, thread_ts, function(messages, error)
     if error then
       vim.notify('Failed to load thread: ' .. error, vim.log.levels.ERROR)
       return
     end
-    
+
     state.thread_messages = messages
     state.thread_parent = state.selected_message
     state.view_mode = 'thread'
-    
+
     -- Render thread view
     M.render_thread()
   end)
@@ -733,13 +799,13 @@ function M.render_thread()
   if not state.messages_buf or not vim.api.nvim_buf_is_valid(state.messages_buf) then
     return
   end
-  
-  vim.api.nvim_buf_set_option(state.messages_buf, 'modifiable', true)
-  
+
+  vim.api.nvim_set_option_value('modifiable', true, { buf = state.messages_buf })
+
   local lines = {}
   local users = require('nvim-slack.api.users')
   state.message_timestamps = {}
-  
+
   -- Header
   local channel_name = state.current_channel.name or 'channel'
   if state.current_channel.is_im then
@@ -747,11 +813,11 @@ function M.render_thread()
   else
     channel_name = '#' .. channel_name
   end
-  
+
   table.insert(lines, ' Thread in ' .. channel_name .. ' [Press b to go back]')
   table.insert(lines, ' ' .. string.rep('─', vim.api.nvim_win_get_width(state.messages_win) - 2))
   table.insert(lines, '')
-  
+
   -- Thread messages
   for i, msg in ipairs(state.thread_messages) do
     if msg.type == 'message' then
@@ -764,13 +830,13 @@ function M.render_thread()
         index = i,
         reactions = msg.reactions,
       }
-      
+
       -- Format timestamp
       local timestamp = os.date('%H:%M', tonumber(msg.ts))
-      
+
       -- Get username
       local username = users.get_display_name(msg.user)
-      
+
       -- Format message header
       local header = string.format('[%s] %s:', timestamp, username)
       if i == 1 then
@@ -780,15 +846,15 @@ function M.render_thread()
       else
         header = '  ' .. header
       end
-      
+
       table.insert(lines, header)
-      
+
       -- Split message text by newlines
       local text_lines = vim.split(msg.text or '', '\n')
       for _, line in ipairs(text_lines) do
         table.insert(lines, '    ' .. line)
       end
-      
+
       -- Show reactions if any
       if msg.reactions and #msg.reactions > 0 then
         local reaction_line = '    '
@@ -797,27 +863,28 @@ function M.render_thread()
         end
         table.insert(lines, reaction_line)
       end
-      
+
       table.insert(lines, '')
     end
   end
-  
+
   vim.api.nvim_buf_set_lines(state.messages_buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(state.messages_buf, 'modifiable', false)
-  
+  vim.api.nvim_set_option_value('modifiable', false, { buf = state.messages_buf })
+
   -- Apply highlights
   local ns = vim.api.nvim_create_namespace('slack_messages')
   vim.api.nvim_buf_clear_namespace(state.messages_buf, ns, 0, -1)
-  
+
   -- Highlight selected message
   if state.selected_message then
     for line_num, msg_info in pairs(state.message_timestamps) do
       if msg_info.ts == state.selected_message.ts then
-        vim.api.nvim_buf_add_highlight(state.messages_buf, ns, 'SlackMessageSelected', line_num - 1, 0, -1)
+        vim.api.nvim_buf_set_extmark(state.messages_buf, ns, line_num - 1, 0,
+          { end_row = line_num - 1, hl_eol = true, hl_group = 'SlackMessageSelected' })
       end
     end
   end
-  
+
   -- Scroll to bottom
   M.scroll_messages_bottom()
 end
@@ -832,33 +899,35 @@ function M.go_back()
   end
 end
 
--- Override send_message to handle threads
-local original_send_message = M.send_message
+-- Send message (handles threads)
 function M.send_message()
   if not state.current_channel then
     vim.notify('No channel selected', vim.log.levels.WARN)
     return
   end
-  
+
   -- Get input text
+  if not state.input_buf or not vim.api.nvim_buf_is_valid(state.input_buf) then
+    return
+  end
   local lines = vim.api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
   local text = table.concat(lines, '\n')
-  
+
   -- Remove default prompt
   if text == 'Type your message...' then
     text = ''
   end
-  
+
   text = vim.trim(text)
-  
+
   if text == '' then
     return
   end
-  
+
   local chat = require('nvim-slack.api.chat')
-  
+
   -- Silent sending
-  
+
   local options = {}
   if state.thread_ts then
     options.thread_ts = state.thread_ts
@@ -866,20 +935,22 @@ function M.send_message()
     -- If in thread view, default to replying to that thread
     options.thread_ts = state.thread_parent.thread_ts or state.thread_parent.ts
   end
-  
-  chat.post_message(state.current_channel.id, text, function(result, error)
+
+  chat.post_message(state.current_channel.id, text, function(_, error)
     if error then
       vim.notify('Failed to send message: ' .. error, vim.log.levels.ERROR)
       return
     end
-    
+
     -- Message sent successfully
-    
+
     -- Clear input and thread state
-    vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, {''})
+    if state.input_buf and vim.api.nvim_buf_is_valid(state.input_buf) then
+      vim.api.nvim_buf_set_lines(state.input_buf, 0, -1, false, { '' })
+    end
     state.thread_ts = nil
     state.is_thread_reply = false
-    
+
     -- Refresh appropriate view
     if state.view_mode == 'thread' then
       M.open_thread() -- Refresh thread view
