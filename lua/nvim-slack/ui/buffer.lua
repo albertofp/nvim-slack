@@ -404,9 +404,10 @@ function M.render_messages()
 
       -- Show reactions if any
       if msg.reactions and #msg.reactions > 0 then
+        local emoji_helper = require('nvim-slack.emoji')
         local reaction_line = '    '
         for _, reaction in ipairs(msg.reactions) do
-          reaction_line = reaction_line .. ':' .. reaction.name .. ':(' .. reaction.count .. ') '
+          reaction_line = reaction_line .. emoji_helper.format_reaction(reaction.name, reaction.count) .. ' '
         end
         table.insert(lines, reaction_line)
       end
@@ -857,9 +858,10 @@ function M.render_thread()
 
       -- Show reactions if any
       if msg.reactions and #msg.reactions > 0 then
+        local emoji_helper = require('nvim-slack.emoji')
         local reaction_line = '    '
         for _, reaction in ipairs(msg.reactions) do
-          reaction_line = reaction_line .. ':' .. reaction.name .. ':(' .. reaction.count .. ') '
+          reaction_line = reaction_line .. emoji_helper.format_reaction(reaction.name, reaction.count) .. ' '
         end
         table.insert(lines, reaction_line)
       end
