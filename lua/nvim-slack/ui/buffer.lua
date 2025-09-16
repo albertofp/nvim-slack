@@ -103,6 +103,10 @@ function M.open()
 
   -- Load initial data
   M.refresh_channels()
+  
+  -- Populate user cache for name resolution
+  local users = require('nvim-slack.api.users')
+  users.populate_cache()
 
   -- Set up autocommands
   M.setup_autocmds()

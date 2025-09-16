@@ -50,11 +50,55 @@ function M.list(callback)
   end)
 end
 
+-- Clean username by removing invisible Unicode characters
+local function clean_username(name)
+  if not name then return name end
+
+  -- Remove zero-width spaces and other problematic characters
+  -- Use byte patterns for UTF-8 sequences
+  name = name:gsub('\226\128\139', '') -- Zero-width space (U+200B)
+  name = name:gsub('\226\128\140', '') -- Zero-width non-joiner (U+200C)
+  name = name:gsub('\226\128\141', '') -- Zero-width joiner (U+200D)
+  name = name:gsub('\239\187\191', '') -- Zero-width no-break space/BOM (U+FEFF)
+
+  -- Remove any other control characters or weird spacing
+  name = name:gsub('[\1-\31]', '') -- ASCII control characters
+  name = name:gsub('\194\173', '') -- Soft hyphen (U+00AD)
+
+  return name
+end
+
 -- Get user by ID from cache or format fallback
 function M.get_display_name(user_id)
   if user_cache[user_id] then
-    return user_cache[user_id].real_name or user_cache[user_id].name
+    local user = user_cache[user_id]
+    -- Prioritize display_name, then real_name, then name (username)
+    local display = user.display_name and user.display_name ~= "" and user.display_name
+        or user.real_name and user.real_name ~= "" and user.real_name
+        or user.name and user.name ~= "" and user.name
+        or user_id
+    return clean_username(display)
   end
+
+  -- If not in cache, try to fetch it asynchronously for future use
+  -- but return the user_id for now
+  M.info(user_id, function() end) -- Fetch in background
+
+  return user_id
+end
+
+-- Get a shorter name for compact display (username preferred over real name)
+function M.get_username(user_id)
+  if user_cache[user_id] then
+    local user = user_cache[user_id]
+    -- For compact display, prefer username over real name
+    local username = user.name or user.display_name or user.real_name or user_id
+    return clean_username(username)
+  end
+
+  -- If not in cache, try to fetch it asynchronously for future use
+  M.info(user_id, function() end) -- Fetch in background
+
   return user_id
 end
 
