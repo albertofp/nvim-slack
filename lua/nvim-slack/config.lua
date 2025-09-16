@@ -29,7 +29,7 @@ local defaults = {
 
   -- Performance
   cache_messages = 100,
-  sync_interval = 30,     -- seconds
+  sync_interval = 2,      -- seconds (how often to poll for updates)
   request_timeout = 5000, -- ms
 
   -- Keymaps

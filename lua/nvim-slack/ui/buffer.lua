@@ -24,7 +24,14 @@ local state = {
   selected_message = nil,
   mode = 'normal', -- normal, insert, thread
   view_mode = 'channel', -- channel or thread
+  
+  -- Polling state
+  poll_timer = nil,
+  last_message_count = 0,
 }
+
+-- Forward declaration
+local start_polling
 
 -- Create the main Slack layout
 function M.open()
@@ -73,6 +80,9 @@ function M.open()
   
   -- Set up autocommands
   M.setup_autocmds()
+  
+  -- Start polling for updates
+  start_polling()
 end
 
 -- Setup channel list buffer
@@ -516,6 +526,7 @@ function M.setup_autocmds()
         group = group,
         buffer = buf,
         callback = function()
+          M.stop_polling()
           M.close()
         end,
       })
@@ -523,8 +534,116 @@ function M.setup_autocmds()
   end
 end
 
+-- Start polling for updates
+start_polling = function()
+  if state.poll_timer then
+    return -- Already polling
+  end
+  
+  local config = require('nvim-slack.config').get()
+  local interval = config.sync_interval * 1000 -- Convert to milliseconds
+  
+  state.poll_timer = vim.loop.new_timer()
+  state.poll_timer:start(interval, interval, function()
+    -- Schedule the update in the main thread
+    vim.schedule(function()
+      -- Only poll if windows are still valid
+      if not vim.api.nvim_win_is_valid(state.messages_win or -1) then
+        M.stop_polling()
+        return
+      end
+      
+      -- Check if the Slack buffer is currently visible in any window
+      local slack_visible = false
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        if buf == state.messages_buf or buf == state.channels_buf then
+          slack_visible = true
+          break
+        end
+      end
+      
+      if not slack_visible then
+        return -- Don't poll if not visible
+      end
+      
+      -- Store current cursor position and selected message
+      local cursor_pos = nil
+      if vim.api.nvim_win_is_valid(state.messages_win) and 
+         vim.api.nvim_get_current_win() == state.messages_win then
+        cursor_pos = vim.api.nvim_win_get_cursor(state.messages_win)
+      end
+      
+      -- Refresh appropriate view
+      if state.view_mode == 'thread' and state.thread_parent then
+        -- Refresh thread silently
+        local thread_ts = state.thread_parent.thread_ts or state.thread_parent.ts
+        local conversations = require('nvim-slack.api.conversations')
+        
+        conversations.replies(state.current_channel.id, thread_ts, function(messages, error)
+          if not error and messages then
+            local prev_count = #state.thread_messages
+            state.thread_messages = messages
+            
+            -- Only re-render if message count changed
+            if #messages ~= prev_count then
+              M.render_thread()
+              
+              -- Restore cursor if it was in messages window
+              if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
+                pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+              end
+            end
+          end
+        end)
+      elseif state.current_channel then
+        -- Refresh channel messages silently
+        local conversations = require('nvim-slack.api.conversations')
+        
+        conversations.history(state.current_channel.id, function(messages, error)
+          if not error and messages then
+            local prev_count = #state.messages
+            state.messages = messages
+            
+            -- Only re-render if message count changed
+            if #messages ~= prev_count then
+              M.render_messages()
+              
+              -- If new messages arrived and we were at bottom, scroll to bottom
+              if #messages > prev_count and prev_count > 0 then
+                -- Check if we were near the bottom
+                if cursor_pos and vim.api.nvim_win_is_valid(state.messages_win) then
+                  local line_count = vim.api.nvim_buf_line_count(state.messages_buf)
+                  if cursor_pos[1] >= line_count - 5 then
+                    M.scroll_messages_bottom()
+                  else
+                    -- Otherwise restore cursor position
+                    pcall(vim.api.nvim_win_set_cursor, state.messages_win, cursor_pos)
+                  end
+                end
+              end
+            end
+          end
+        end)
+      end
+    end)
+  end)
+end
+
+-- Stop polling for updates
+M.stop_polling = function()
+  if state.poll_timer then
+    state.poll_timer:stop()
+    state.poll_timer:close()
+    state.poll_timer = nil
+  end
+end
+
 -- Close all Slack windows
 function M.close()
+  -- Stop polling first
+  M.stop_polling()
+  
   for _, win in ipairs({state.channels_win, state.messages_win, state.input_win}) do
     if win and vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)

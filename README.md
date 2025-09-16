@@ -4,11 +4,13 @@ A Neovim plugin for interacting with Slack directly from your editor.
 
 ## Features
 
-- Connect to Slack workspaces using Socket Mode
+- Connect to Slack workspaces using Web API
 - View channels and direct messages
 - Send and receive messages
 - Navigate with Vim keybindings
-- Real-time updates via WebSocket
+- Automatic updates with configurable polling interval
+- Thread support for viewing and replying
+- Emoji reactions
 
 ## Requirements
 
@@ -104,6 +106,31 @@ Use the User OAuth Token in your Neovim config:
 require('nvim-slack').setup({
   -- Your User OAuth Token from Step 4
   token = 'xoxp-...'
+})
+```
+
+## Configuration Options
+
+```lua
+require('nvim-slack').setup({
+  -- Required
+  token = 'xoxp-...', -- Your Slack user token
+  
+  -- Optional (shown with defaults)
+  sync_interval = 2,  -- How often to poll for updates (in seconds)
+  api = {
+    debug = false,
+    request_timeout = 5000, -- ms
+  },
+  ui = {
+    width = 80,
+    height = 30,
+    position = 'center',
+    channel_width = 20,
+    show_timestamps = true,
+    date_format = '%H:%M',
+    highlight_mentions = true,
+  },
 })
 ```
 
@@ -207,12 +234,15 @@ Run `:checkhealth nvim-slack` to verify your installation and configuration.
 ## Development Status
 
 This plugin is in early development. Current features:
-- ✅ WebSocket connection to Slack
-- ✅ Basic UI buffer
+- ✅ Web API connection to Slack
+- ✅ Three-pane UI (channels, messages, input)
 - ✅ Configuration management
 - ✅ Channel listing
-- ✅ Message viewing
+- ✅ Message viewing with automatic updates
 - ✅ Message sending
+- ✅ Thread viewing and replying
+- ✅ Emoji reactions
+- ✅ Direct messages and group messages
 
 ## License
 
