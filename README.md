@@ -119,11 +119,72 @@ require('nvim-slack').setup({
 - `:SlackDisconnect` - Disconnect from Slack
 - `:SlackStatus` - Show connection status
 
-### Keybindings (in Slack buffer)
+### Keybindings
 
-- `q` - Close Slack buffer
-- `<C-r>` - Refresh current view
-- More keybindings coming soon!
+All keybindings work in normal mode unless specified otherwise.
+
+#### Navigation Between Panes
+| Key | Action | From |
+|-----|--------|------|
+| `h` | Move to channel list | Messages pane |
+| `l` | Move to messages/open channel | Channel list |
+| `i` | Jump to input area | Any pane |
+| `<Esc>` | Go back to messages | Input pane |
+
+#### Channel List (left pane)
+| Key | Action |
+|-----|--------|
+| `j` | Move down to next channel |
+| `k` | Move up to previous channel |
+| `<Enter>` or `l` | Open selected channel |
+| `r` | Refresh channel list |
+| `q` | Close Slack |
+| `i` or `I` | Jump to input area |
+
+#### Messages View (right pane)
+| Key | Action |
+|-----|--------|
+| `j` | Select next message (move cursor down) |
+| `k` | Select previous message (move cursor up) |
+| `G` | Jump to bottom (latest message) |
+| `h` | Go back to channel list |
+| `r` | Refresh messages in current channel |
+| `q` | Close Slack |
+| `i` or `I` | Jump to input area |
+
+#### Message Actions (requires selected message)
+| Key | Action |
+|-----|--------|
+| `t` | Reply to selected message in thread |
+| `e` | Add emoji reaction to selected message |
+| `<Enter>` | View thread (opens thread view for any message) |
+
+#### Thread View
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate between thread messages |
+| `i` | Type message (automatically replies to thread) |
+| `t` | Reply to selected message in thread |
+| `e` | Add emoji reaction to selected message |
+| `b` | Go back to channel view |
+| `r` | Refresh thread |
+| `q` | Close Slack |
+
+#### Input Area (bottom pane)
+| Key | Mode | Action |
+|-----|------|--------|
+| `<Ctrl-Enter>` | Insert | Send message |
+| `<Enter>` | Normal | Send message |
+| `<Esc>` | Insert/Normal | Exit to messages pane |
+
+#### Global Commands
+| Command | Action |
+|---------|--------|
+| `:Slack` | Open Slack interface (auto-connects if needed) |
+| `:SlackConnect` | Manually connect to Slack |
+| `:SlackDisconnect` | Disconnect from Slack |
+| `:SlackStatus` | Show connection status |
+| `:SlackDebug` | Test connection and show debug info |
 
 
 ## Important Notes About Authentication

@@ -55,7 +55,7 @@ function M.connect(token, callback)
       state.user = data.user
       state.team = data.team
       
-      vim.notify('Authenticated as ' .. data.user .. ' in ' .. data.team, vim.log.levels.INFO)
+      -- Authenticated successfully
       
       -- Mark as connected (we'll use polling for updates)
       state.connected = true
@@ -81,10 +81,13 @@ function M.api_request(method, params, callback)
   local utils = require('nvim-slack.utils')
   local config = require('nvim-slack.config').get()
   
-  -- Build form data
+  -- Build form data with proper URL encoding
   local form_data = {}
   for k, v in pairs(params or {}) do
-    table.insert(form_data, k .. '=' .. vim.fn.escape(tostring(v), ' '))
+    local encoded_value = string.gsub(tostring(v), "([^%w%-%.%_%~])", function(c)
+      return string.format("%%%02X", string.byte(c))
+    end)
+    table.insert(form_data, k .. '=' .. encoded_value)
   end
   local data = table.concat(form_data, '&')
   

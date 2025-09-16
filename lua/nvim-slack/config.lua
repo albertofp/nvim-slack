@@ -5,12 +5,10 @@ local defaults = {
   -- Authentication
   token = nil, -- Slack user token (xoxp-...)
   
-  -- WebSocket settings
-  websocket = {
+  -- API settings
+  api = {
     debug = false,
-    ping_interval = 30, -- seconds
-    reconnect_attempts = 3,
-    reconnect_delay = 5, -- seconds
+    request_timeout = 5000, -- ms
   },
   
   -- UI Settings

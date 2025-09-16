@@ -3,7 +3,7 @@ local M = {}
 -- Local state
 local state = {
   connected = false,
-  websocket = nil,
+  api = nil,
   config = nil,
   workspace = nil,
 }
@@ -14,7 +14,7 @@ function M.setup(opts)
   state.config = config.setup(opts)
 
   -- Initialize submodules
-  require('nvim-slack.websocket').setup(state.config)
+  require('nvim-slack.api').setup(state.config)
   
   -- Load debug module in development
   require('nvim-slack.debug')
@@ -35,14 +35,14 @@ function M.connect()
     return
   end
 
-  vim.notify('Connecting to Slack...', vim.log.levels.INFO)
+  -- Connecting silently
 
-  local websocket = require('nvim-slack.websocket')
-  websocket.connect(token, function(success, error)
+  local api = require('nvim-slack.api')
+  api.connect(token, function(success, error)
     if success then
       state.connected = true
-      state.websocket = websocket
-      vim.notify('Connected to Slack successfully', vim.log.levels.INFO)
+      state.api = api
+      -- Connected successfully
     else
       vim.notify('Failed to connect to Slack: ' .. (error or 'Unknown error'), vim.log.levels.ERROR)
     end
@@ -56,12 +56,12 @@ function M.disconnect()
     return
   end
 
-  if state.websocket then
-    require('nvim-slack.websocket').disconnect()
+  if state.api then
+    require('nvim-slack.api').disconnect()
   end
 
   state.connected = false
-  state.websocket = nil
+  state.api = nil
   vim.notify('Disconnected from Slack', vim.log.levels.INFO)
 end
 
@@ -80,7 +80,7 @@ end
 -- Open Slack buffer
 function M.open()
   if not state.connected then
-    vim.notify('Not connected to Slack. Connecting...', vim.log.levels.INFO)
+    -- Connect silently
     M.connect()
     -- Wait a moment for connection to complete
     vim.defer_fn(function()
