@@ -263,6 +263,7 @@ function M.render_channels()
 
   local lines = {}
   local highlights = {}
+  local users = require('nvim-slack.api.users')
 
   table.insert(lines, ' CHANNELS')
   table.insert(lines, ' ' .. string.rep('─', 28))
@@ -275,7 +276,9 @@ function M.render_channels()
 
     local name = channel.name
     if channel.is_im then
-      name = '@' .. (channel.user or 'direct')
+      -- Use get_display_name to get proper user display name
+      local username = channel.user and users.get_display_name(channel.user) or 'direct'
+      name = '@' .. username
     elseif channel.is_mpim then
       name = '@' .. (channel.name_normalized or 'group')
     else
